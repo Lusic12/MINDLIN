@@ -1,29 +1,29 @@
 function [Mx, My, Mxy, Qx, Qy] = computeStresses(nodes, elements, U, E, nu, h)
-    % computeStresses - Recovers moments and shear forces at Gauss points
-    % Inputs:
-    %   nodes    - Node coordinates [node_id, x, y]
-    %   elements - Element connectivity [elem_id, node1, node2, node3, node4]
-    %   U        - Global displacement vector
-    %   E        - Young's modulus
-    %   nu       - Poisson's ratio
-    %   h        - Plate thickness
-    % Outputs:
-    %   Mx  - Bending moment about x-axis
-    %   My  - Bending moment about y-axis
-    %   Mxy - Twisting moment
-    %   Qx  - Shear force in x-direction
-    %   Qy  - Shear force in y-direction
+    % Tính mô men uốn và lực cắt tại các điểm Gauss
+    % Đầu vào:
+    %   nodes    - Tọa độ các nút [node_id, x, y]
+    %   elements - Ma trận liên kết phần tử [elem_id, node1, node2, node3, node4]
+    %   U        - Vector chuyển vị toàn cục
+    %   E        - Mô đun đàn hồi Young
+    %   nu       - Hệ số Poisson
+    %   h        - Chiều dày tấm
+    % Đầu ra:
+    %   Mx  - Mô men uốn quanh trục x
+    %   My  - Mô men uốn quanh trục y
+    %   Mxy - Mô men xoắn
+    %   Qx  - Lực cắt theo phương x
+    %   Qy  - Lực cắt theo phương y
     
-    % Material stiffness matrix
+    % Ma trận độ cứng vật liệu
     D = (E * h^3) / (12 * (1 - nu^2)) * [1, nu, 0;
                                          nu, 1, 0;
                                          0, 0, (1-nu)/2];
-    % Shear stiffness
+    % Độ cứng cắt
     G = E / (2 * (1 + nu));
-    kappa = 5/6;  % Shear correction factor
+    kappa = 5/6;  % Hệ số hiệu chỉnh cắt
     Ds = kappa * G * h;
     
-    % Initialize stress arrays
+    % Khởi tạo mảng kết quả ứng suất
     nElements = size(elements, 1);
     Mx = zeros(nElements, 1);
     My = zeros(nElements, 1);
@@ -31,63 +31,63 @@ function [Mx, My, Mxy, Qx, Qy] = computeStresses(nodes, elements, U, E, nu, h)
     Qx = zeros(nElements, 1);
     Qy = zeros(nElements, 1);
     
-    % Gauss point coordinates for stress evaluation
-    xi = 0;  % Center of element
+    % Tọa độ điểm Gauss để tính ứng suất (tâm phần tử)
+    xi = 0;
     eta = 0;
     
-    % Loop over elements
+    % Vòng lặp qua từng phần tử
     for el = 1:nElements
         nodeIds = elements(el, 2:5);
         
-        % Get nodal coordinates
+        % Lấy tọa độ các nút của phần tử
         xe = nodes(nodeIds, 2);
         ye = nodes(nodeIds, 3);
         
-        % Get element displacements
+        % Lấy chuyển vị phần tử
         Ue = zeros(12, 1);
         for i = 1:4
             n = nodeIds(i);
             Ue(3*i-2:3*i) = U(3*n-2:3*n);
         end
         
-        % Shape function derivatives at center point
+        % Đạo hàm hàm dạng tại tâm phần tử
         dNdxi = [-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
         dNdeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
         
-        % Jacobian
+        % Ma trận Jacobi
         J = [dNdxi*xe, dNdxi*ye;
              dNdeta*xe, dNdeta*ye];
         invJ = inv(J);
         
-        % Initialize B matrices
+        % Khởi tạo ma trận B
         Bb = zeros(3, 12);  % Bending
         Bs = zeros(2, 12);  % Shear
         
-        % Compute B matrices
+        % Tính ma trận B
         for n = 1:4
             dNdx = invJ(1,1)*dNdxi(n) + invJ(1,2)*dNdeta(n);
             dNdy = invJ(2,1)*dNdxi(n) + invJ(2,2)*dNdeta(n);
             idx = 3*(n-1) + 1;
             
-            % Bending strain-displacement matrix
+            % Ma trận biến dạng uốn
             Bb(:, idx:idx+2) = [0, dNdx, 0;
                                0, 0, dNdy;
                                0, dNdy, dNdx];
             
-            % Shear strain-displacement matrix
+            % Ma trận biến dạng cắt
             Bs(:, idx:idx+2) = [dNdx, 1, 0;
                                dNdy, 0, 1];
         end
         
-        % Compute curvatures and shear strains
+        % Tính độ cong và biến dạng cắt
         kappa = Bb * Ue;  % [κx; κy; κxy]
         gamma = Bs * Ue;  % [γxz; γyz]
         
-        % Compute moments and shear forces
+        % Tính mô men và lực cắt
         moments = D * kappa;
         shears = Ds * gamma;
         
-        % Store results
+        % Lưu kết quả
         Mx(el) = moments(1);
         My(el) = moments(2);
         Mxy(el) = moments(3);

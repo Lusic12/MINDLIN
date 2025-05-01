@@ -29,7 +29,7 @@ function [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, bcString)
         switch bcString(i)
             case 'C'  % Clamped
                 % Constrain all DOFs (w, θx, θy)
-                for node = edges{i}'
+                for node = edges{i}
                     constrainedDOFs = [constrainedDOFs; 
                                      3*node-2;  % w
                                      3*node-1;  % θx
@@ -37,7 +37,7 @@ function [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, bcString)
                 end
             case 'S'  % Simply supported
                 % Constrain only displacement (w)
-                for node = edges{i}'
+                for node = edges{i}
                     constrainedDOFs = [constrainedDOFs; 
                                      3*node-2]; % w only
                 end

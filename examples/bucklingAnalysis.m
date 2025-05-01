@@ -1,51 +1,51 @@
-% Example Buckling Analysis of a Mindlin Plate
-% This script demonstrates how to perform buckling analysis of a rectangular plate
+% Ví dụ phân tích ổn định (buckling) tấm Mindlin
+% Script này minh họa cách thực hiện phân tích ổn định cho tấm chữ nhật
 
-% Clear workspace and close figures
+% Xóa workspace và đóng các cửa sổ hình
 clear all;
 close all;
 clc;
 
-% Plate parameters
-L = 1.0;  % Length in x-direction (m)
-W = 1.0;  % Width in y-direction (m)
-h = 0.01; % Thickness (m)
-E = 210e9;    % Young's modulus (Pa)
-nu = 0.3;     % Poisson's ratio
-Nx = -1000;   % Compressive load in x-direction (N/m)
+% Thông số tấm
+L = 1.0;  % Chiều dài theo phương x (m)
+W = 1.0;  % Chiều rộng theo phương y (m)
+h = 0.01; % Chiều dày (m)
+E = 210e9;    % Mô đun Young (Pa)
+nu = 0.3;     % Hệ số Poisson
+Nx = -1000;   % Lực nén theo phương x (N/m)
 
-% Mesh parameters
-nx = 10; % Number of elements in x-direction
-ny = 10; % Number of elements in y-direction
+% Thông số lưới
+nx = 10; % Số phần tử theo x
+ny = 10; % Số phần tử theo y
 
-% Create mesh
-disp('Generating mesh...');
+% Sinh lưới
+disp('Đang sinh lưới...');
 [nodes, elements] = generateMesh(L, W, nx, ny);
 
-% Assemble stiffness matrix (material stiffness)
-disp('Assembling material stiffness matrix...');
+% Lắp ráp ma trận độ cứng vật liệu
+disp('Đang lắp ráp ma trận độ cứng vật liệu...');
 [K, ~] = assembleSystem(nodes, elements, E, nu, h, 0);
 
-% Assemble geometric stiffness matrix
-disp('Assembling geometric stiffness matrix...');
+% Lắp ráp ma trận độ cứng hình học
+disp('Đang lắp ráp ma trận độ cứng hình học...');
 Kg = assembleGeometricStiffness(nodes, elements, Nx);
 
-% Apply boundary conditions (simply supported on all edges)
-disp('Applying boundary conditions...');
-[K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes);
+% Áp dụng điều kiện biên (đỡ đơn toàn bộ biên)
+disp('Đang áp dụng điều kiện biên...');
+[K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes, 'SSSS');
 
-% Solve eigenvalue problem
-disp('Solving eigenvalue problem...');
-[V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');  % Get 5 smallest eigenvalues
+% Giải bài toán giá trị riêng
+disp('Đang giải bài toán giá trị riêng...');
+[V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');  % Lấy 5 giá trị riêng nhỏ nhất
 lambdas = diag(D);
 
-% Display critical buckling loads
-disp('Critical buckling load factors:');
+% Hiển thị hệ số tới hạn
+disp('Các hệ số tải tới hạn:');
 disp(lambdas);
 
-% Plot first buckling mode
-disp('Plotting first buckling mode...');
-plotDeformation(nodes, elements, V(:,1));
-title('First Buckling Mode Shape');
+% Vẽ mode mất ổn định đầu tiên
+disp('Vẽ mode mất ổn định đầu tiên...');
+plotDeformedShape(nodes, elements, V(:,1), 0.2);
+title('Mode mất ổn định thứ nhất');
 
-disp('Analysis complete!');
+disp('Đã hoàn thành phân tích!');

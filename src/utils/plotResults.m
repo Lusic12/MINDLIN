@@ -1,148 +1,198 @@
-function plotResults(nodes, elements, U, analysisType, plotType, colormap, animate)
-% plotResults - Enhanced visualization of analysis results
-% Inputs:
-%   nodes        - Node coordinates [node_id, x, y]
-%   elements     - Element connectivity [elem_id, node1, node2, node3, node4]
-%   U            - Results vector (displacements, mode shapes, etc.)
-%   analysisType - Type of analysis (1:Static, 2:Buckling, 3:Vibration)
-%   plotType     - Type of plot (1:All, 2:Mesh, 3:Deformation, 4:Contour)
-%   colormap     - Name of colormap to use
-%   animate      - Boolean flag for animation (for buckling/vibration)
+function plotResults(nodes, elements, U, analysisType, plotType, colormap, animate, exportPath)
+% Hiển thị kết quả phân tích với các tuỳ chọn trực quan hóa nâng cao
+% Đầu vào:
+%   nodes, elements, U - dữ liệu lưới và chuyển vị
+%   analysisType - loại phân tích (1: tĩnh, 2: ổn định, 3: dao động)
+%   plotType - kiểu đồ thị
+%   colormap - bảng màu
+%   animate - có hoạt hình không
+%   exportPath - đường dẫn xuất file (nếu có)
 
-    % Set colormap
-    colormap(gca, colormap);
-
-    % Extract vertical displacements for deformation plot
-    w = U(1:3:end);
-    
-    % Calculate scale factor for deformation
-    maxDefl = max(abs(w));
-    L = max(nodes(:,2)) - min(nodes(:,2));
-    scaleFactor = 0.2 * L / maxDefl;
-    
-    % Plot based on type
-    switch plotType
-        case 2 % Mesh only
-            plotMeshOnly(nodes, elements);
-            
-        case 3 % Deformation
-            if animate && (analysisType > 1)
-                animateDeformation(nodes, elements, w, scaleFactor);
-            else
-                plotDeformedShape(nodes, elements, w, scaleFactor);
-            end
-            
-        case 4 % Contour
-            plotContourResults(nodes, elements, w);
-            
-        case 1 % All results
-            subplot(2,2,1);
-            plotMeshOnly(nodes, elements);
-            title('Original Mesh');
-            
-            subplot(2,2,2);
-            plotDeformedShape(nodes, elements, w, scaleFactor);
-            title('Deformed Shape');
-            
-            subplot(2,2,3);
-            plotContourResults(nodes, elements, w);
-            title('Contour Plot');
-            
-            subplot(2,2,4);
-            switch analysisType
-                case 1
-                    plotStaticResults(w);
-                case 2
-                    plotBucklingResults(U);
-                case 3
-                    plotVibrationResults(U);
-            end
-    end
+% Thiết lập đường dẫn xuất mặc định
+if nargin < 8
+    exportPath = '';
 end
 
-function plotMeshOnly(nodes, elements)
-    hold on;
-    for el = 1:size(elements, 1)
-        nodeIds = elements(el, 2:5);
-        xe = nodes(nodeIds, 2);
-        ye = nodes(nodeIds, 3);
-        plot([xe; xe(1)], [ye; ye(1)], 'b-', 'LineWidth', 0.5);
-    end
-    plot(nodes(:,2), nodes(:,3), 'r.', 'MarkerSize', 6);
-    xlabel('X (m)'); ylabel('Y (m)');
-    grid on; axis equal tight;
+% Thiết lập figure
+figResults = gcf;
+set(figResults, 'Color', 'w'); % Nền trắng cho xuất file đẹp
+
+% Bố cục subplot
+if plotType == 1 % Hiển thị tất cả kết quả
+    plotLayout = [2 2];
+else
+    plotLayout = [1 1];
 end
 
-function plotDeformedShape(nodes, elements, w, scaleFactor)
-    hold on;
-    for el = 1:size(elements, 1)
-        nodeIds = elements(el, 2:5);
-        xe = nodes(nodeIds, 2);
-        ye = nodes(nodeIds, 3);
-        we = w(nodeIds) * scaleFactor;
+% Vẽ theo loại
+switch plotType
+    case 1 % Tất cả kết quả
+        subplot(plotLayout(1), plotLayout(2), 1)
+        plotMesh(nodes, elements);
+        title('Cấu hình lưới', 'FontWeight', 'bold')
         
-        % Plot original mesh in light gray
-        plot3([xe; xe(1)], [ye; ye(1)], zeros(5,1), 'Color', [0.8 0.8 0.8]);
-        % Plot deformed shape
-        patch(xe, ye, we, we, 'EdgeColor', 'interp', 'FaceColor', 'interp');
-    end
-    xlabel('X (m)'); ylabel('Y (m)'); zlabel('Displacement (m)');
-    view(3); grid on; axis equal tight;
+        subplot(plotLayout(1), plotLayout(2), 2)
+        plotDeformedShape(nodes, elements, U, computeScaleFactor(U));
+        title('Hình dạng biến dạng', 'FontWeight', 'bold')
+        
+        subplot(plotLayout(1), plotLayout(2), 3)
+        plotContourResults(nodes, elements, U);
+        title('Contour chuyển vị', 'FontWeight', 'bold')
+        
+        subplot(plotLayout(1), plotLayout(2), 4)
+        plotAnalysisSpecific(analysisType, U);
+        
+    case 2 % Chỉ lưới và chất lượng
+        plotMeshWithQuality(nodes, elements);
+        
+    case 3 % Biến dạng có hoạt hình
+        if animate
+            animateResults(nodes, elements, U, analysisType);
+        else
+            plotDeformedShape(nodes, elements, U, computeScaleFactor(U));
+        end
+        
+    case 4 % Contour nâng cao
+        plotContourResults(nodes, elements, U);
 end
 
-function plotContourResults(nodes, elements, w)
+% Áp dụng bảng màu
+colormap(gca, colormap);
+
+% Xuất file nếu có đường dẫn
+if ~isempty(exportPath)
+    exportResults(figResults, exportPath);
+end
+
+end
+
+function scaleFactor = computeScaleFactor(U)
+    maxDefl = max(abs(U));
+    if maxDefl > 0
+        scaleFactor = 0.2 / maxDefl;
+    else
+        scaleFactor = 1;
+    end
+end
+
+function plotMeshWithQuality(nodes, elements)
+    % Vẽ lưới với chỉ số chất lượng
     hold on;
-    trisurf(elements(:,2:4), nodes(:,2), nodes(:,3), w, ...
-        'EdgeColor', 'none', 'FaceColor', 'interp');
-    view(2);
-    xlabel('X (m)'); ylabel('Y (m)');
-    c = colorbar;
-    c.Label.String = 'Displacement (m)';
+    [aspectRatio, skewness] = calculateMeshQuality(nodes, elements);
+    qualityMetric = max(aspectRatio, skewness);
+    patch('Faces', elements(:,2:5), ...
+          'Vertices', nodes(:,2:3), ...
+          'FaceVertexCData', qualityMetric, ...
+          'FaceColor', 'flat', ...
+          'EdgeColor', 'k');
+    colorbar('TickLabelInterpreter', 'latex');
+    title('Phân bố chất lượng lưới', 'FontWeight', 'bold');
+    xlabel('X (m)');
+    ylabel('Y (m)');
     axis equal tight;
 end
 
-function animateDeformation(nodes, elements, w, scaleFactor)
-    % Animation parameters
+function [aspectRatio, skewness] = calculateMeshQuality(nodes, elements)
+    nElements = size(elements, 1);
+    aspectRatio = zeros(nElements, 1);
+    skewness = zeros(nElements, 1);
+    for el = 1:nElements
+        nodeIds = elements(el, 2:5);
+        xe = nodes(nodeIds, 2);
+        ye = nodes(nodeIds, 3);
+        dx = max(xe) - min(xe);
+        dy = max(ye) - min(ye);
+        aspectRatio(el) = max(dx/dy, dy/dx);
+        angles = calculateElementAngles(xe, ye);
+        skewness(el) = max(abs(angles - 90)) / 90;
+    end
+end
+
+function angles = calculateElementAngles(xe, ye)
+    angles = zeros(4,1);
+    for i = 1:4
+        j = mod(i, 4) + 1;
+        k = mod(i-2, 4) + 1;
+        v1 = [xe(j)-xe(i), ye(j)-ye(i)];
+        v2 = [xe(k)-xe(i), ye(k)-ye(i)];
+        cos_theta = dot(v1,v2)/(norm(v1)*norm(v2));
+        angles(i) = acosd(cos_theta);
+    end
+end
+
+function animateResults(nodes, elements, U, analysisType)
+    % Hoạt hình biến dạng
     nFrames = 30;
-    period = 2; % seconds for one cycle
-    
-    % Create animation
+    period = 2; % giây cho 1 chu kỳ
+    hold on;
+    axis equal;
+    grid on;
     for frame = 1:nFrames
         cla;
         phase = 2*pi * frame/nFrames;
-        wAnim = w * scaleFactor * cos(phase);
-        
-        % Plot deformed shape for this frame
-        plotDeformedShape(nodes, elements, wAnim, 1);
+        switch analysisType
+            case 1 % Tĩnh
+                scaleFactor = computeScaleFactor(U);
+            case {2, 3} % Ổn định hoặc Dao động
+                scaleFactor = 0.2 * cos(phase);
+        end
+        plotDeformedShape(nodes, elements, U * scaleFactor, 1);
         drawnow;
         pause(period/nFrames);
     end
 end
 
-function plotStaticResults(w)
-    % Create bar chart of max/min displacements
-    bar([max(w), min(w)]);
+function exportResults(fig, exportPath)
+    % Xuất hình ra nhiều định dạng
+    [path, name] = fileparts(exportPath);
+    if ~exist(path, 'dir')
+        mkdir(path);
+    end
+    print(fig, fullfile(path, [name '_fig.png']), '-dpng', '-r300');
+    print(fig, fullfile(path, [name '_fig.pdf']), '-dpdf', '-bestfit');
+    savefig(fig, fullfile(path, [name '_fig.fig']));
+    results = struct();
+    results.nodes = evalin('base', 'nodes');
+    results.elements = evalin('base', 'elements');
+    results.displacement = evalin('base', 'U');
+    save(fullfile(path, [name '_data.mat']), 'results');
+end
+
+function plotAnalysisSpecific(analysisType, U)
+    switch analysisType
+        case 1 % Tĩnh
+            plotStaticSummary(U);
+        case 2 % Ổn định
+            plotBucklingSummary(U);
+        case 3 % Dao động
+            plotVibrationSummary(U);
+    end
+end
+
+function plotStaticSummary(U)
+    % Biểu đồ cột chuyển vị lớn nhất/nhỏ nhất
+    bar([max(U), min(U)]);
     set(gca, 'XTickLabel', {'Max', 'Min'});
-    ylabel('Displacement (m)');
-    title('Displacement Extremes');
+    ylabel('Chuyển vị (m)');
+    title('Giá trị chuyển vị cực trị');
     grid on;
 end
 
-function plotBucklingResults(U)
-    % Plot first few buckling factors
+function plotBucklingSummary(U)
+    % Biểu đồ hệ số tới hạn
     bar(diag(U(1:5,1:5)));
-    xlabel('Mode Number');
-    ylabel('Buckling Factor');
-    title('Critical Buckling Factors');
+    xlabel('Mode');
+    ylabel('Hệ số tới hạn');
+    title('Các hệ số tới hạn chính');
     grid on;
 end
 
-function plotVibrationResults(U)
-    % Plot natural frequencies
+function plotVibrationSummary(U)
+    % Biểu đồ tần số riêng
     freqs = sqrt(diag(U))/(2*pi);
     bar(freqs(1:5));
-    xlabel('Mode Number');
-    ylabel('Frequency (Hz)');
-    title('Natural Frequencies');
+    xlabel('Mode');
+    ylabel('Tần số (Hz)');
+    title('Tần số dao động riêng');
     grid on;
 end
