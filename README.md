@@ -1,72 +1,72 @@
-# Phân Tích Tấm Mindlin bằng Phương Pháp Phần Tử Hữu Hạn (FEM) – MATLAB  
+# Phân Tích Tấm Mindlin Bằng Phương Pháp Phần Tử Hữu Hạn (FEM) – MATLAB
 
-**Mindlin-Plate-Analysis** là thư viện MATLAB mạnh mẽ để phân tích tấm dày (Mindlin/Reissner), hỗ trợ các bài toán tĩnh, ổn định (buckling) và dao động tự do. Với giao diện đồ họa trực quan và khả năng chạy trên **MATLAB Online**, công cụ này lý tưởng cho cả người mới bắt đầu và chuyên gia phân tích kết cấu.
-
----
-
-## 🌟 Tính năng nổi bật
-- **Phân tích tĩnh**: Tính độ võng, ứng suất dưới tải trọng phân bố đều hoặc không đều.  
-- **Phân tích ổn định (buckling)**: Xác định tải tới hạn và dạng mất ổn định (nén một hoặc hai trục).  
-- **Phân tích dao động tự do**: Tính tần số riêng và dạng mode dao động, xét quán tính quay.  
-- **Giao diện đồ họa (GUI)**: `MindlinPlateAnalysisHub` giúp thiết lập và trực quan hóa dễ dàng.  
-- **Điều kiện biên linh hoạt**: Tự do (F), Đỡ đơn (S), Kẹp cứng (C) cho từng mép.  
-- **Sinh lưới tứ giác tự động**: Kiểm soát mật độ lưới theo hai hướng, đánh số nút/phần tử.  
-- **Trực quan hóa kết quả**: Đồ thị biến dạng, contour ứng suất, mode shape, bảng tần số, hệ số tải tới hạn.  
-- **Hỗ trợ MATLAB Online**: Chạy trực tiếp trên trình duyệt mà không cần cài đặt.
+**Mindlin-Plate-Analysis** là thư viện MATLAB mạnh mẽ để phân tích tấm dày (theo lý thuyết Mindlin/Reissner), hỗ trợ các bài toán tĩnh, ổn định (buckling) và dao động tự do. Với giao diện đồ họa trực quan và khả năng chạy trên **MATLAB Online**, công cụ này lý tưởng cho cả người mới bắt đầu và chuyên gia phân tích kết cấu.
 
 ---
 
-## 🗂️ Cấu trúc thư mục
+## 🌟 Tính Năng Nổi Bật
+- **Phân tích tĩnh**: Tính toán độ võng, ứng suất dưới tác dụng của tải trọng phân bố đều hoặc không đều
+- **Phân tích ổn định**: Xác định tải tới hạn và dạng mất ổn định (nén theo một hoặc hai trục)
+- **Phân tích dao động tự do**: Tính toán tần số riêng và dạng dao động, có xét đến quán tính quay
+- **Giao diện đồ họa (GUI)**: Sử dụng `MindlinPlateAnalysisHub` để thiết lập và trực quan hóa kết quả
+- **Điều kiện biên đa dạng**: Hỗ trợ biên tự do (F), đỡ đơn (S), ngàm (C) cho mỗi cạnh
+- **Lưới tứ giác tự động**: Điều chỉnh mật độ lưới theo hai phương, tự động đánh số nút và phần tử
+- **Trực quan hóa kết quả**: Biểu diễn biến dạng, đường đẳng trị ứng suất, dạng dao động, và các thông số đặc trưng
+- **Tương thích MATLAB Online**: Sử dụng trực tiếp trên trình duyệt web mà không cần cài đặt
+
+---
+
+## 🗂️ Cấu Trúc Thư Mục
 ```text
 mindlin-plate-analysis/
-├── startup.m                   # Thiết lập đường dẫn & môi trường
-├── examples/                   # Các ví dụ minh họa
-│   ├── staticAnalysis.m       # Phân tích tĩnh
-│   ├── bucklingAnalysis.m     # Phân tích ổn định
-│   └── vibrationAnalysis.m    # Phân tích dao động
+├── startup.m                   # Khởi tạo môi trường làm việc
+├── examples/                   # Thư mục chứa các ví dụ
+│   ├── staticAnalysis.m       # Ví dụ phân tích tĩnh
+│   ├── bucklingAnalysis.m     # Ví dụ phân tích ổn định
+│   └── vibrationAnalysis.m    # Ví dụ phân tích dao động
 └── src/
-    ├── analysis/               # Mô-đun phân tích
-    │   ├── static/            # Hàm phân tích tĩnh
-    │   ├── buckling/          # Hàm phân tích ổn định
-    │   └── vibration/         # Hàm phân tích dao động
-    ├── element/                # Công thức phần tử Mindlin
-    ├── mesh/                   # Sinh lưới tự động
-    ├── gui/                    # Giao diện đồ họa
-    └── utils/                  # Công cụ vẽ & xử lý dữ liệu
+    ├── analysis/              # Mô-đun phân tích
+    │   ├── static/           # Phân tích tĩnh
+    │   ├── buckling/         # Phân tích ổn định
+    │   └── vibration/        # Phân tích dao động
+    ├── element/              # Phần tử Mindlin
+    ├── mesh/                 # Sinh lưới
+    ├── gui/                  # Giao diện người dùng
+    └── utils/                # Công cụ bổ trợ
 ```
 
 ---
 
-## ⚙️ Yêu cầu hệ thống
+## ⚙️ Yêu Cầu Hệ Thống
 | Phần mềm          | Phiên bản tối thiểu |
 |-------------------|---------------------|
-| **MATLAB**        | R2020b (khuyến nghị R2022a+) |
-| **Toolbox**       | Không yêu cầu bổ sung |
+| **MATLAB**        | R2020b (khuyến nghị R2022a trở lên) |
+| **Toolbox**       | Không yêu cầu thêm |
 | **Trình duyệt**   | Chrome, Firefox, Edge (cho MATLAB Online) |
 
-> **Lưu ý**: Để đạt hiệu năng tốt trên MATLAB Online, sử dụng lưới vừa phải (nx, ny ≤ 20) và đảm bảo kết nối internet ổn định.
+> **Lưu ý**: Để có hiệu năng tốt trên MATLAB Online, nên sử dụng lưới có kích thước vừa phải (nx, ny ≤ 20) và đảm bảo đường truyền internet ổn định.
 
 ---
 
-## 🚀 Cài đặt & khởi chạy
+## 🚀 Hướng Dẫn Cài Đặt và Sử Dụng
 
-### Chạy trên MATLAB Online
-1. **Tải lên dự án**:
-   - Truy cập [MATLAB Online](https://matlab.mathworks.com).
-   - Tải thư mục `mindlin-plate-analysis` lên MATLAB Drive.
-2. **Thiết lập đường dẫn**:
+### Sử Dụng Trên MATLAB Online
+1. **Tải Lên Dự Án**:
+   - Truy cập [MATLAB Online](https://matlab.mathworks.com)
+   - Tải thư mục `mindlin-plate-analysis` lên MATLAB Drive
+2. **Thiết Lập Môi Trường**:
    ```matlab
-   % Di chuyển đến thư mục dự án
+   % Chuyển đến thư mục dự án
    cd mindlin-plate-analysis
-   % Chạy script khởi tạo
+   % Chạy tập lệnh khởi tạo
    startup
    ```
-3. **Khởi chạy giao diện**:
+3. **Khởi Động Giao Diện**:
    ```matlab
    MindlinPlateAnalysisHub
    ```
 
-### Chạy nhanh qua script
+### Chạy Nhanh Bằng Script
 ```matlab
 % Phân tích tĩnh
 examples/staticAnalysis
@@ -80,38 +80,44 @@ examples/vibrationAnalysis
 
 ---
 
-## 📝 Thiết lập bài toán
-1. **Hình học & lưới**:
-   - Nhập kích thước tấm (a × b), chiều dày `h`, số phần tử lưới (`nx × ny`).
-2. **Vật liệu**:
-   - Định nghĩa mô-đun Young `E`, hệ số Poisson `ν`, khối lượng riêng `ρ`, hệ số cắt (mặc định 5/6).
-3. **Điều kiện biên**:
-   - Chuỗi 4 ký tự (trái–phải–trước–sau) với F (Tự do), S (Đỡ đơn), C (Kẹp cứng).  
-   - Ví dụ: `"SSSS"` (tất cả mép đỡ đơn).
-4. **Tải trọng**:
-   - Áp suất, lực tập trung, hoặc moment tùy thuộc bài toán.
-5. **Chạy & xem kết quả**:
-   - Sử dụng GUI để xem trực quan hoặc xuất dữ liệu ra workspace.
+## 📝 Hướng Dẫn Thiết Lập Bài Toán
+1. **Thông Số Hình Học và Lưới**:
+   - Nhập kích thước tấm (a × b), chiều dày (h)
+   - Chọn số phần tử theo mỗi phương (nx × ny)
+2. **Đặc Trưng Vật Liệu**:
+   - Mô-đun đàn hồi (E)
+   - Hệ số Poisson (ν)
+   - Khối lượng riêng (ρ)
+   - Hệ số hiệu chỉnh cắt (mặc định 5/6)
+3. **Điều Kiện Biên**:
+   - Sử dụng chuỗi 4 ký tự cho 4 cạnh (trái–phải–trước–sau)
+   - F: Tự do, S: Đỡ đơn, C: Ngàm
+   - Ví dụ: "SSSS" - tất cả các cạnh đỡ đơn
+4. **Tải Trọng**:
+   - Tùy chọn áp lực, lực tập trung hoặc moment
+5. **Thực Hiện Phân Tích**:
+   - Sử dụng giao diện để xem kết quả
+   - Xuất dữ liệu ra không gian làm việc
 
 ---
 
-## 🔧 Khắc phục sự cố
-| Vấn đề                          | Giải pháp                                                                 |
-|---------------------------------|---------------------------------------------------------------------------|
-| **Lỗi đường dẫn hàm**           | Chạy `startup.m` để thêm thư mục vào MATLAB path.                         |
-| **Kết quả không chính xác**     | Tăng mật độ lưới hoặc kiểm tra đơn vị vật liệu (`E`, `ν`, `h`).           |
-| **GUI hiển thị sai font**       | Đảm bảo MATLAB Online bật hỗ trợ UTF-8 hoặc chọn font hỗ trợ tiếng Việt.  |
-| **Chạy chậm trên MATLAB Online**| Giảm số phần tử lưới hoặc kiểm tra kết nối internet.                      |
+## 🔧 Xử Lý Sự Cố
+| Vấn đề                     | Giải pháp                                                  |
+|---------------------------|-----------------------------------------------------------|
+| **Lỗi đường dẫn**         | Chạy lại `startup.m`                                       |
+| **Kết quả không chính xác**| Tăng mật độ lưới, kiểm tra đơn vị đầu vào                |
+| **Lỗi hiển thị font**     | Kích hoạt hỗ trợ UTF-8 trong MATLAB                       |
+| **Chậm trên MATLAB Online**| Giảm kích thước lưới, kiểm tra kết nối mạng              |
 
 ---
 
-## 🤝 Đóng góp
-Chúng tôi hoan nghênh mọi đóng góp!  
-1. Fork repository và tạo branch mới (`feature/tên-tính-năng` hoặc `bugfix/mô-tả`).  
-2. Đảm bảo code sạch, tuân thủ **MATLAB Code Analyzer**.  
-3. Tạo Pull Request với mô tả chi tiết thay đổi.  
+## 🤝 Đóng Góp
+Chúng tôi luôn chào đón mọi đóng góp từ cộng đồng!
+1. Fork dự án và tạo nhánh mới (`feature/tên-tính-năng` hoặc `bugfix/mô-tả`)
+2. Tuân thủ quy tắc viết mã của MATLAB Code Analyzer
+3. Tạo Pull Request với mô tả chi tiết về những thay đổi
 
 ---
 
-## 📜 Giấy phép
-MIT License – sử dụng, chỉnh sửa, chia sẻ tự do với điều kiện ghi nhận tác giả.
+## 📜 Giấy Phép
+Giấy phép MIT – Cho phép sử dụng, sửa đổi và phân phối tự do với điều kiện ghi nhận tác giả gốc.

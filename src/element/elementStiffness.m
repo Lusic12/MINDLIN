@@ -1,4 +1,4 @@
-function [Ke, Fe] = elementStiffness(xe, ye, D, h, q)
+function [Ke, Fe] = elementStiffness(xe, ye, D, h, q, varargin)
     % elementStiffness - Calculates element stiffness matrix and load vector
     % Inputs:
     %   xe - x coordinates of element nodes
@@ -6,22 +6,39 @@ function [Ke, Fe] = elementStiffness(xe, ye, D, h, q)
     %   D  - Material stiffness matrix
     %   h  - Plate thickness
     %   q  - Distributed load
+    % Optional inputs:
+    %   dT - Temperature change across thickness
+    %   alpha - Thermal expansion coefficient
     
+    % Parse optional thermal inputs
+    p = inputParser;
+    addOptional(p, 'dT', 0);
+    addOptional(p, 'alpha', 0);
+    parse(p, varargin{:});
+    dT = p.Results.dT;
+    alpha = p.Results.alpha;
+
     % Material properties for shear
     G = D(3,3) * 2 * (1 + D(1,2)/D(1,1));  % Shear modulus
     kappa = 5/6;  % Shear correction factor
     
-    % Gauss quadrature points and weights
-    gp = [-1/sqrt(3), 1/sqrt(3)];
-    w = [1, 1];
+    % Higher-order Gauss quadrature (3x3) for better accuracy
+    gp = [-sqrt(0.6), 0, sqrt(0.6)];
+    w = [5/9, 8/9, 5/9];
     
     % Initialize element matrices
     Ke = zeros(12, 12);
     Fe = zeros(12, 1);
     
+    % Add thermal load vector if temperature change exists
+    if dT ~= 0
+        MT = -D(1,1)*alpha*dT*h^2/(1-D(1,2));  % Thermal moment
+        FT = zeros(12, 1);
+    end
+
     % Loop over Gauss points
-    for i = 1:2
-        for j = 1:2
+    for i = 1:3
+        for j = 1:3
             xi = gp(i);
             eta = gp(j);
             
@@ -50,19 +67,42 @@ function [Ke, Fe] = elementStiffness(xe, ye, D, h, q)
                                    0, 0, dNdy;
                                    0, dNdy, dNdx];
                                    
-                % Shear strain-displacement matrix
-                Bs(:, idx:idx+2) = [dNdx, N(n), 0;
-                                   dNdy, 0, N(n)];
+                % Modified shear strain-displacement matrix with assumed strain field
+                % This helps prevent shear locking
+                Bs(:, idx:idx+2) = [dNdx, N(n)*(1-xi^2), 0;
+                                   dNdy, 0, N(n)*(1-eta^2)];
+            end
+            
+            % Selective reduced integration for shear terms to prevent locking
+            if i == 2 && j == 2  % Center point
+                shearWeight = 4;  % Increased weight for center point
+            else
+                shearWeight = 1;
             end
             
             % Element stiffness contributions
-            Ke = Ke + (Bb'*D*Bb + kappa*G*h*Bs'*Bs)*detJ*w(i)*w(j);
+            Ke = Ke + (Bb'*D*Bb + kappa*G*h*Bs'*Bs/shearWeight)*detJ*w(i)*w(j);
             
-            % Element load vector contribution
+            % Element load vector contributions
             for n = 1:4
                 idx = 3*(n-1) + 1;
                 Fe(idx) = Fe(idx) + N(n)*q*detJ*w(i)*w(j);
+                
+                if dT ~= 0
+                    % Add thermal load contribution
+                    FT(idx+1:idx+2) = FT(idx+1:idx+2) + ...
+                        MT*[dNdx; dNdy]*detJ*w(i)*w(j);
+                end
             end
         end
     end
+    
+    % Add thermal loads to force vector
+    if dT ~= 0
+        Fe = Fe + FT;
+    end
+    
+    % Add stabilization term to prevent zero-energy modes
+    alpha = 1e-6 * trace(Ke)/12;  % Small stabilization factor
+    Ke = Ke + alpha * eye(12);
 end

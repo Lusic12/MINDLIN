@@ -1,4 +1,4 @@
-function [K, F] = assembleSystem(nodes, elements, E, nu, h, q)
+function [K, F] = assembleSystem(nodes, elements, E, nu, h, q, varargin)
     % assembleSystem - Assembles global stiffness matrix and load vector
     % Inputs:
     %   nodes    - Node coordinates [node_id, x, y]
@@ -7,9 +7,18 @@ function [K, F] = assembleSystem(nodes, elements, E, nu, h, q)
     %   nu       - Poisson's ratio
     %   h        - Plate thickness
     %   q        - Distributed load
+    % Optional inputs:
+    %   dT       - Temperature change across thickness
+    %   alpha    - Thermal expansion coefficient
+    
+    % Parse optional thermal inputs
+    p = inputParser;
+    addOptional(p, 'dT', 0);
+    addOptional(p, 'alpha', 0);
+    parse(p, varargin{:});
     
     nNodes = size(nodes, 1);
-    nDOF = 3 * nNodes;  % 3 DOF per node (w, θx, θy)
+    nDOF = 3 * nNodes;
     
     % Initialize global matrices
     K = sparse(nDOF, nDOF);
@@ -24,12 +33,17 @@ function [K, F] = assembleSystem(nodes, elements, E, nu, h, q)
     for el = 1:size(elements, 1)
         nodeIds = elements(el, 2:5);
         
-        % Get nodal coordinates for this element
+        % Get nodal coordinates
         xe = nodes(nodeIds, 2);
         ye = nodes(nodeIds, 3);
         
-        % Calculate element stiffness matrix and load vector
-        [Ke, Fe] = elementStiffness(xe, ye, D, h, q);
+        % Calculate element matrices with thermal effects if specified
+        if p.Results.dT ~= 0
+            [Ke, Fe] = elementStiffness(xe, ye, D, h, q, 'dT', p.Results.dT, ...
+                                      'alpha', p.Results.alpha);
+        else
+            [Ke, Fe] = elementStiffness(xe, ye, D, h, q);
+        end
         
         % Global DOF indices for this element
         dof = zeros(12, 1);
