@@ -1,63 +1,111 @@
-function [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, bcString)
-    % applyBoundaryConditions - Applies boundary conditions for static analysis
-    % Inputs:
-    %   K        - Stiffness matrix
-    %   F        - Force vector
-    %   nodes    - Node coordinates [node_id, x, y]
-    %   bcString - Four-character string specifying boundary conditions
-    %             for Left, Right, Top, Bottom edges (e.g., 'SSSS', 'CFSC')
+function [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, boundaryConditions)
+% Áp đặt điều kiện biên cho bài toán tĩnh tấm Mindlin
+% Đầu vào:
+%   K           - Ma trận độ cứng toàn cục
+%   F           - Vector tải toàn cục
+%   nodes       - Tọa độ các nút [node_id, x, y]
+%   boundaryConditions - Cấu trúc chứa thông tin điều kiện biên
+%       .type  - Loại điều kiện biên ('ssss','cccc','scsc','cccf')
+
+try
+    % Tính số bậc tự do và số nút
+    GDof = size(K,1);
+    numberNodes = size(nodes,1);
     
-    % Find nodes on each edge
-    tol = 1e-6;
-    xmin = min(nodes(:,2));
-    xmax = max(nodes(:,2));
-    ymin = min(nodes(:,3));
-    ymax = max(nodes(:,3));
-    
-    % Get nodes on each edge
-    leftNodes = find(abs(nodes(:,2) - xmin) < tol);
-    rightNodes = find(abs(nodes(:,2) - xmax) < tol);
-    bottomNodes = find(abs(nodes(:,3) - ymin) < tol);
-    topNodes = find(abs(nodes(:,3) - ymax) < tol);
-    
-    % Initialize constrained DOFs
-    constrainedDOFs = [];
-    
-    % Process each edge
-    edges = {leftNodes, rightNodes, topNodes, bottomNodes};
-    for i = 1:4
-        switch bcString(i)
-            case 'C'  % Clamped
-                % Constrain all DOFs (w, θx, θy)
-                for node = edges{i}
-                    constrainedDOFs = [constrainedDOFs; 
-                                     3*node-2;  % w
-                                     3*node-1;  % θx
-                                     3*node];   % θy
-                end
-            case 'S'  % Simply supported
-                % Constrain only displacement (w)
-                for node = edges{i}
-                    constrainedDOFs = [constrainedDOFs; 
-                                     3*node-2]; % w only
-                end
-            case 'F'  % Free
-                % No constraints
-                continue
-        end
+    % Lấy tọa độ các nút
+    xx = nodes(:,2);
+    yy = nodes(:,3);
+
+    % Xác định các nút bị ràng buộc theo loại điều kiện biên
+    switch boundaryConditions.type
+        case 'ssss' % Kê đơn giản 4 cạnh
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = find(yy == max(nodes(:,3)) | ...
+                             yy == min(nodes(:,3)));
+            fixedNodeTY = find(xx == max(nodes(:,2)) | ...
+                             xx == min(nodes(:,2)));
+            
+        case 'cccc' % Ngàm 4 cạnh
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = fixedNodeW;
+            fixedNodeTY = fixedNodeTX;
+            
+        case 'scsc' % Ngàm-kê đơn giản xen kẽ
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = find(xx == max(nodes(:,2)) | ...
+                             xx == min(nodes(:,2)));
+            fixedNodeTY = [];
+            
+        case 'cccf' % Ngàm 3 cạnh, tự do 1 cạnh
+            fixedNodeW = find(xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = fixedNodeW;
+            fixedNodeTY = fixedNodeTX;
+            
+        otherwise
+            error('Loại điều kiện biên không hợp lệ');
     end
+
+    % Tổng hợp tất cả các bậc tự do bị ràng buộc
+    prescribedDof = [fixedNodeW; 
+                     fixedNodeTX + numberNodes;
+                     fixedNodeTY + 2*numberNodes];
     
-    % Remove duplicates (nodes at corners)
-    constrainedDOFs = unique(constrainedDOFs);
-    
-    % Apply constraints using the penalty method
+    % Tìm các bậc tự do hoạt động (không bị ràng buộc)
+    activeDof = setdiff(1:GDof, prescribedDof);
+
+    % Kiểm tra tính hợp lệ của điều kiện biên
+    validateBoundaryConditions(prescribedDof, GDof);
+
+    % Áp dụng điều kiện biên bằng cách điều chỉnh ma trận và vector
     K_mod = K;
     F_mod = F;
-    penalty = 1e15;
     
-    for i = 1:length(constrainedDOFs)
-        dof = constrainedDOFs(i);
-        K_mod(dof,dof) = K_mod(dof,dof) + penalty;
-        F_mod(dof) = 0;
+    % Đặt các hàng và cột tương ứng với DOF bị ràng buộc về 0
+    K_mod(prescribedDof,:) = 0;
+    K_mod(:,prescribedDof) = 0;
+    
+    % Đặt 1 trên đường chéo để đảm bảo điều kiện xác định
+    for i = 1:length(prescribedDof)
+        K_mod(prescribedDof(i),prescribedDof(i)) = 1;
+    end
+    
+    % Điều chỉnh vector tải
+    F_mod(prescribedDof) = 0;
+
+catch ME
+    error('Lỗi trong áp đặt điều kiện biên: %s', ME.message);
+end
+end
+
+%................................................................
+% Hàm kiểm tra tính hợp lệ của điều kiện biên
+function validateBoundaryConditions(prescribedDof, GDof)
+    % Kiểm tra chỉ số bậc tự do
+    if any(prescribedDof < 1) || any(prescribedDof > GDof)
+        error('Chỉ số bậc tự do bị ràng buộc nằm ngoài phạm vi hợp lệ');
+    end
+    
+    % Kiểm tra tính duy nhất
+    if length(unique(prescribedDof)) ~= length(prescribedDof)
+        warning('Có bậc tự do bị ràng buộc trùng lặp');
+    end
+    
+    % Kiểm tra số lượng ràng buộc
+    if length(prescribedDof) < 3
+        warning('Số lượng ràng buộc có thể không đủ để ngăn chuyển động cứng');
+    end
+    if length(prescribedDof) > GDof/2
+        warning('Số lượng ràng buộc có thể quá nhiều');
     end
 end

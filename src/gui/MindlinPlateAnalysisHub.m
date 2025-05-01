@@ -415,27 +415,26 @@ cbxAnimate = uicontrol(panelResults, 'Style', 'checkbox', ...
     'Enable', 'off');
 
 % Add progress panel with more detailed feedback
-panelProgress = uipanel(figControl, 'Title', 'Analysis Progress', ...
+panelProgress = uipanel(figControl, 'Title', 'Tiến trình phân tích', ...
     'Position', [0.05, 0.02, 0.9, 0.07], ...
     'BackgroundColor', panelColor, ...
     'ForegroundColor', accentColor, ...
     'FontWeight', 'bold', ...
     'HighlightColor', accentColor);
 
-% Progress bar (using rectangle)
-axProgress = axes('Parent', panelProgress, ...
+% Tạo progress bar bằng uipanel thay vì axes
+progressBar = uipanel(panelProgress, ...
     'Position', [0.05, 0.2, 0.7, 0.6], ...
-    'XLim', [0 1], 'YLim', [0 1], ...
-    'XTick', [], 'YTick', []);
+    'BackgroundColor', [0.9 0.9 0.9]);
 
-hProgress = rectangle('Position', [0 0.25 0 0.5], ...
-    'FaceColor', buttonColor, ...
-    'Parent', axProgress);
+progressFill = uipanel(progressBar, ...
+    'Position', [0 0 0 1], ...
+    'BackgroundColor', buttonColor);
 
 % Status text
 txtProgress = uicontrol(panelProgress, 'Style', 'text', ...
     'Position', [20, 10, 260, 20], ...
-    'String', 'Ready', ...
+    'String', 'Sẵn sàng', ...
     'BackgroundColor', panelColor);
 
 % Run button with cancel option
@@ -596,83 +595,96 @@ end
 
 function showStaticResults(params, scaleFactor)
     if nargin < 2, scaleFactor = 1; end
-    % Create new figure window for static analysis results
-    figResults = figure('Name', 'Static Analysis Results', ...
-        'NumberTitle', 'off', ...
-        'Position', [850, 100, 900, 600]);
-    
-    % Run analysis
-    [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
-    [K, F] = assembleSystem(nodes, elements, params.E, params.poisson, ...
-        params.thickness, params.loadValue);
-    [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, params.boundaryConditions);
-    U = K_mod\F_mod;
-    
-    % Get colormap selection properly
-    colormaps = get(popupColormap, 'String');
-    selectedColormap = colormaps{get(popupColormap, 'Value')};
-    
-    % Use enhanced plotting
-    plotResults(nodes, elements, U * scaleFactor, 1, params.plotType, selectedColormap, ...
-        get(cbxAnimate, 'Value'));
+    try
+        % Create new figure window for static analysis results
+        figResults = figure('Name', 'Kết quả phân tích tĩnh', ...
+            'NumberTitle', 'off', ...
+            'Position', [850, 100, 900, 600]);
+        
+        % Run analysis
+        [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
+        [K, F] = assembleSystem(nodes, elements, params.E, params.poisson, ...
+            params.thickness, params.loadValue);
+        [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, params.boundaryConditions);
+        U = K_mod\F_mod;
+        
+        % Get colormap selection properly
+        colormaps = get(popupColormap, 'String');
+        selectedColormap = colormaps{get(popupColormap, 'Value')};
+        
+        % Use enhanced plotting with error handling
+        plotResults(nodes, elements, U * scaleFactor, 1, params.plotType, selectedColormap, ...
+            get(cbxAnimate, 'Value'));
+            
+    catch ME
+        checkGraphicsError(ME);
+    end
 end
 
 function showBucklingResults(params, scaleFactor)
     if nargin < 2, scaleFactor = 1; end
-    % Create new figure window for buckling analysis results
-    figResults = figure('Name', 'Buckling Analysis Results', ...
-        'NumberTitle', 'off', ...
-        'Position', [850, 100, 900, 600]);
-    
-    % Run buckling analysis
-    [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
-    [K, ~] = assembleSystem(nodes, elements, params.E, params.poisson, ...
-        params.thickness, 0);
-    Kg = assembleGeometricStiffness(nodes, elements, params.loadValue);
-    [K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes, params.boundaryConditions);
-    [V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');
-    
-    % Get colormap selection properly
-    colormaps = get(popupColormap, 'String');
-    selectedColormap = colormaps{get(popupColormap, 'Value')};
-    
-    % Use enhanced plotting
-    plotResults(nodes, elements, V(:,1) * scaleFactor, 2, params.plotType, selectedColormap, ...
-        get(cbxAnimate, 'Value'));
-    
-    % Display critical load factors in status bar
-    criticalLoads = sort(diag(D), 'ascend');
-    set(statusBar, 'String', sprintf('Critical load factors: %.4f, %.4f, %.4f', ...
-        criticalLoads(1:3)), 'ForegroundColor', [0 0.6 0]);
+    try
+        % Create new figure window for buckling analysis results
+        figResults = figure('Name', 'Buckling Analysis Results', ...
+            'NumberTitle', 'off', ...
+            'Position', [850, 100, 900, 600]);
+        
+        % Run buckling analysis
+        [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
+        [K, ~] = assembleSystem(nodes, elements, params.E, params.poisson, ...
+            params.thickness, 0);
+        Kg = assembleGeometricStiffness(nodes, elements, params.loadValue);
+        [K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes, params.boundaryConditions);
+        [V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');
+        
+        % Get colormap selection properly
+        colormaps = get(popupColormap, 'String');
+        selectedColormap = colormaps{get(popupColormap, 'Value')};
+        
+        % Use enhanced plotting with error handling
+        plotResults(nodes, elements, V(:,1) * scaleFactor, 2, params.plotType, selectedColormap, ...
+            get(cbxAnimate, 'Value'));
+        
+        % Display critical load factors in status bar
+        criticalLoads = sort(diag(D), 'ascend');
+        set(statusBar, 'String', sprintf('Critical load factors: %.4f, %.4f, %.4f', ...
+            criticalLoads(1:3)), 'ForegroundColor', [0 0.6 0]);
+    catch ME
+        checkGraphicsError(ME);
+    end
 end
 
 function showVibrationResults(params, scaleFactor)
     if nargin < 2, scaleFactor = 1; end
-    % Create new figure window for vibration analysis results
-    figResults = figure('Name', 'Vibration Analysis Results', ...
-        'NumberTitle', 'off', ...
-        'Position', [850, 100, 900, 600]);
-    
-    % Run vibration analysis
-    [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
-    [K, ~] = assembleSystem(nodes, elements, params.E, params.poisson, ...
-        params.thickness, 0);
-    M = assembleMassMatrix(nodes, elements, params.density, params.thickness);
-    [K_mod, M_mod] = applyVibrationBoundaryConditions(K, M, nodes, params.boundaryConditions);
-    [V, D] = eigs(K_mod, M_mod, 5, 'smallestabs');
-    frequencies = sqrt(diag(D))/(2*pi);
-    
-    % Get colormap selection properly
-    colormaps = get(popupColormap, 'String');
-    selectedColormap = colormaps{get(popupColormap, 'Value')};
-    
-    % Use enhanced plotting
-    plotResults(nodes, elements, V(:,1) * scaleFactor, 3, params.plotType, selectedColormap, ...
-        get(cbxAnimate, 'Value'));
-    
-    % Display natural frequencies in status bar
-    set(statusBar, 'String', sprintf('Natural frequencies (Hz): %.2f, %.2f, %.2f', ...
-        frequencies(1:3)), 'ForegroundColor', [0 0.6 0]);
+    try
+        % Create new figure window for vibration analysis results
+        figResults = figure('Name', 'Vibration Analysis Results', ...
+            'NumberTitle', 'off', ...
+            'Position', [850, 100, 900, 600]);
+        
+        % Run vibration analysis
+        [nodes, elements] = generateMesh(params.L, params.W, params.nx, params.ny);
+        [K, ~] = assembleSystem(nodes, elements, params.E, params.poisson, ...
+            params.thickness, 0);
+        M = assembleMassMatrix(nodes, elements, params.density, params.thickness);
+        [K_mod, M_mod] = applyVibrationBoundaryConditions(K, M, nodes, params.boundaryConditions);
+        [V, D] = eigs(K_mod, M_mod, 5, 'smallestabs');
+        frequencies = sqrt(diag(D))/(2*pi);
+        
+        % Get colormap selection properly
+        colormaps = get(popupColormap, 'String');
+        selectedColormap = colormaps{get(popupColormap, 'Value')};
+        
+        % Use enhanced plotting with error handling
+        plotResults(nodes, elements, V(:,1) * scaleFactor, 3, params.plotType, selectedColormap, ...
+            get(cbxAnimate, 'Value'));
+        
+        % Display natural frequencies in status bar
+        set(statusBar, 'String', sprintf('Natural frequencies (Hz): %.2f, %.2f, %.2f', ...
+            frequencies(1:3)), 'ForegroundColor', [0 0.6 0]);
+    catch ME
+        checkGraphicsError(ME);
+    end
 end
 
 function updateAnalysisType(~, ~)
@@ -887,21 +899,23 @@ function compareAnalyses(~, ~)
 end
 
 function updateProgress(stage, progress)
-    stages = {'Mesh Generation', 'Matrix Assembly', 'Boundary Conditions', ...
-             'Solution', 'Post-processing'};
-    stageWeight = [0.1, 0.3, 0.1, 0.3, 0.2];
-    
     if nargin < 2
         progress = 0;
     end
-    
-    stageIdx = find(strcmp(stages, stage));
-    if ~isempty(stageIdx)
-        totalProgress = sum(stageWeight(1:stageIdx-1)) + stageWeight(stageIdx)*progress;
-        set(hProgress, 'Position', [0 0.25 totalProgress 0.5]);
-        set(txtProgress, 'String', sprintf('%s: %.0f%%', stage, progress*100));
-        drawnow;
+    % Update progress bar
+    set(progressFill, 'Position', [0 0 progress 1]);
+    set(txtProgress, 'String', sprintf('%s: %.0f%%', stage, progress*100));
+    drawnow;
+end
+
+function checkGraphicsError(ME)
+    if contains(ME.message, 'matlab.graphics.axis.Axes')
+        warning('Lỗi trục đồ thị: %s', ME.message);
+        % Handle error by creating a new figure
+        figure;
+        return;
     end
+    rethrow(ME);
 end
 
 function showMeshQuality(nodes, elements)

@@ -1,60 +1,138 @@
-function [K_mod, M_mod] = applyVibrationBoundaryConditions(K, M, nodes, bcString)
-    % applyVibrationBoundaryConditions - Applies boundary conditions for vibration analysis
-    % Inputs:
-    %   K        - Stiffness matrix
-    %   M        - Mass matrix
-    %   nodes    - Node coordinates [node_id, x, y]
-    %   bcString - Four-character string specifying boundary conditions
-    %             for Left, Right, Top, Bottom edges (e.g., 'SSSS', 'CFSC')
+function [K_mod, M_mod, activeDof] = applyVibrationBoundaryConditions(K, M, nodes, boundaryConditions)
+% Áp đặt điều kiện biên cho bài toán dao động tấm Mindlin
+% Đầu vào:
+%   K           - Ma trận độ cứng toàn cục
+%   M           - Ma trận khối lượng toàn cục
+%   nodes       - Tọa độ các nút [node_id, x, y]
+%   boundaryConditions - Cấu trúc chứa thông tin điều kiện biên
+%       .type  - Loại điều kiện biên ('ssss','cccc','scsc','cccf')
+%       .kapa  - Hệ số hiệu chỉnh cắt (tùy loại điều kiện biên)
+
+try
+    % Tính số bậc tự do và số nút
+    GDof = size(K,1);
+    numberNodes = size(nodes,1);
     
-    % Find nodes on each edge
-    tol = 1e-6;
-    xmin = min(nodes(:,2));
-    xmax = max(nodes(:,2));
-    ymin = min(nodes(:,3));
-    ymax = max(nodes(:,3));
+    % Lấy tọa độ các nút
+    xx = nodes(:,2);
+    yy = nodes(:,3);
+
+    % Xác định các nút bị ràng buộc theo loại điều kiện biên
+    switch boundaryConditions.type
+        case 'ssss' % Kê đơn giản 4 cạnh (kapa = 5/6)
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = find(yy == max(nodes(:,3)) | ...
+                             yy == min(nodes(:,3)));
+            fixedNodeTY = find(xx == max(nodes(:,2)) | ...
+                             xx == min(nodes(:,2)));
+            
+        case 'cccc' % Ngàm 4 cạnh (kapa = 0.8601)
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = fixedNodeW;
+            fixedNodeTY = fixedNodeTX;
+            
+        case 'scsc' % Ngàm-kê đơn giản xen kẽ (kapa = 0.822)
+            fixedNodeW = find(xx == max(nodes(:,2)) | ...
+                            xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = find(xx == max(nodes(:,2)) | ...
+                             xx == min(nodes(:,2)));
+            fixedNodeTY = [];
+            
+        case 'cccf' % Ngàm 3 cạnh, tự do 1 cạnh (kapa = 0.8601)
+            fixedNodeW = find(xx == min(nodes(:,2)) | ...
+                            yy == min(nodes(:,3)) | ...
+                            yy == max(nodes(:,3)));
+            fixedNodeTX = fixedNodeW;
+            fixedNodeTY = fixedNodeTX;
+            
+        otherwise
+            error('Loại điều kiện biên không hợp lệ');
+    end
+
+    % Tổng hợp tất cả các bậc tự do bị ràng buộc
+    prescribedDof = [fixedNodeW; 
+                     fixedNodeTX + numberNodes;
+                     fixedNodeTY + 2*numberNodes];
     
-    % Get nodes on each edge
-    leftNodes = find(abs(nodes(:,2) - xmin) < tol);
-    rightNodes = find(abs(nodes(:,2) - xmax) < tol);
-    bottomNodes = find(abs(nodes(:,3) - ymin) < tol);
-    topNodes = find(abs(nodes(:,3) - ymax) < tol);
+    % Tìm các bậc tự do hoạt động (không bị ràng buộc)
+    activeDof = setdiff(1:GDof, prescribedDof);
+
+    % Kiểm tra tính hợp lệ của điều kiện biên
+    validateVibrationBoundaryConditions(prescribedDof, GDof);
+
+    % Lọc bỏ các hàng và cột bị ràng buộc khỏi ma trận độ cứng và khối lượng
+    K_mod = K(activeDof, activeDof);
+    M_mod = M(activeDof, activeDof);
     
-    % Initialize constrained DOFs
-    constrainedDOFs = [];
-    
-    % Process each edge
-    edges = {leftNodes, rightNodes, topNodes, bottomNodes};
-    for i = 1:4
-        switch bcString(i)
-            case 'C'  % Clamped
-                % Constrain all DOFs (w, θx, θy)
-                for node = edges{i}
-                    constrainedDOFs = [constrainedDOFs; 
-                                     3*node-2;  % w
-                                     3*node-1;  % θx
-                                     3*node];   % θy
-                end
-            case 'S'  % Simply supported
-                % Constrain only displacement (w)
-                for node = edges{i}
-                    constrainedDOFs = [constrainedDOFs; 
-                                     3*node-2]; % w only
-                end
-            case 'F'  % Free
-                % No constraints
-                continue
-        end
+    % Kiểm tra tính chất của các ma trận sau khi lọc
+    validateModifiedMatrices(K_mod, M_mod);
+
+catch ME
+    error('Lỗi trong áp đặt điều kiện biên dao động: %s', ME.message);
+end
+end
+
+%................................................................
+% Hàm kiểm tra tính hợp lệ của điều kiện biên cho bài toán dao động
+function validateVibrationBoundaryConditions(prescribedDof, GDof)
+    % Kiểm tra chỉ số bậc tự do
+    if any(prescribedDof < 1) || any(prescribedDof > GDof)
+        error('Chỉ số bậc tự do bị ràng buộc nằm ngoài phạm vi hợp lệ');
     end
     
-    % Remove duplicates (nodes at corners)
-    constrainedDOFs = unique(constrainedDOFs);
+    % Kiểm tra tính duy nhất
+    if length(unique(prescribedDof)) ~= length(prescribedDof)
+        warning('Có bậc tự do bị ràng buộc trùng lặp');
+    end
     
-    % Get the free DOFs
-    allDOFs = 1:size(K,1);
-    freeDOFs = setdiff(allDOFs, constrainedDOFs);
+    % Kiểm tra số lượng ràng buộc
+    if length(prescribedDof) < 3
+        warning('Số lượng ràng buộc có thể không đủ để ngăn chuyển động cứng');
+    end
+    if length(prescribedDof) > GDof/2
+        warning('Số lượng ràng buộc có thể quá nhiều, ảnh hưởng đến kết quả dao động');
+    end
+end
+
+%................................................................
+% Hàm kiểm tra tính chất của các ma trận sau khi lọc
+function validateModifiedMatrices(K_mod, M_mod)
+    % Kiểm tra tính đối xứng
+    if ~issparse(K_mod)
+        K_mod = sparse(K_mod);
+    end
+    if ~issparse(M_mod)
+        M_mod = sparse(M_mod);
+    end
     
-    % Extract the free DOFs from both matrices
-    K_mod = K(freeDOFs, freeDOFs);
-    M_mod = M(freeDOFs, freeDOFs);
+    if norm(K_mod - K_mod',1) / (norm(K_mod,1) + eps) > 1e-10
+        warning('Ma trận độ cứng sau khi lọc không đối xứng');
+    end
+    if norm(M_mod - M_mod',1) / (norm(M_mod,1) + eps) > 1e-10
+        warning('Ma trận khối lượng sau khi lọc không đối xứng');
+    end
+    
+    % Kiểm tra tính xác định dương
+    if any(diag(K_mod) <= 0)
+        warning('Ma trận độ cứng sau khi lọc có phần tử đường chéo không dương');
+    end
+    if any(diag(M_mod) <= 0)
+        warning('Ma trận khối lượng sau khi lọc có phần tử đường chéo không dương');
+    end
+    
+    % Kiểm tra điều kiện số
+    if condest(K_mod) > 1e8
+        warning('Điều kiện số của ma trận độ cứng sau khi lọc lớn');
+    end
+    if condest(M_mod) > 1e8
+        warning('Điều kiện số của ma trận khối lượng sau khi lọc lớn');
+    end
 end

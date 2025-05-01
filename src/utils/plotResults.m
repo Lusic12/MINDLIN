@@ -1,69 +1,85 @@
-function plotResults(nodes, elements, U, analysisType, plotType, colormap, animate, exportPath)
+function plotResults(nodes, elements, U, analysisType, plotType, colormap_name, animate, exportPath)
 % Hiển thị kết quả phân tích với các tuỳ chọn trực quan hóa nâng cao
 % Đầu vào:
 %   nodes, elements, U - dữ liệu lưới và chuyển vị
 %   analysisType - loại phân tích (1: tĩnh, 2: ổn định, 3: dao động)
 %   plotType - kiểu đồ thị
-%   colormap - bảng màu
+%   colormap_name - tên bảng màu
 %   animate - có hoạt hình không
 %   exportPath - đường dẫn xuất file (nếu có)
 
-% Thiết lập đường dẫn xuất mặc định
-if nargin < 8
-    exportPath = '';
-end
+try
+    % Tạo figure mới nếu chưa có
+    if isempty(get(0, 'CurrentFigure'))
+        figResults = figure('Color', 'w');
+    else
+        figResults = gcf;
+    end
 
-% Thiết lập figure
-figResults = gcf;
-set(figResults, 'Color', 'w'); % Nền trắng cho xuất file đẹp
+    % Bố cục subplot
+    if plotType == 1 % Hiển thị tất cả kết quả
+        plotLayout = [2 2];
+    else
+        plotLayout = [1 1];
+    end
 
-% Bố cục subplot
-if plotType == 1 % Hiển thị tất cả kết quả
-    plotLayout = [2 2];
-else
-    plotLayout = [1 1];
-end
-
-% Vẽ theo loại
-switch plotType
-    case 1 % Tất cả kết quả
-        subplot(plotLayout(1), plotLayout(2), 1)
-        plotMesh(nodes, elements);
-        title('Cấu hình lưới', 'FontWeight', 'bold')
-        
-        subplot(plotLayout(1), plotLayout(2), 2)
-        plotDeformedShape(nodes, elements, U, computeScaleFactor(U));
-        title('Hình dạng biến dạng', 'FontWeight', 'bold')
-        
-        subplot(plotLayout(1), plotLayout(2), 3)
-        plotContourResults(nodes, elements, U);
-        title('Contour chuyển vị', 'FontWeight', 'bold')
-        
-        subplot(plotLayout(1), plotLayout(2), 4)
-        plotAnalysisSpecific(analysisType, U);
-        
-    case 2 % Chỉ lưới và chất lượng
-        plotMeshWithQuality(nodes, elements);
-        
-    case 3 % Biến dạng có hoạt hình
-        if animate
-            animateResults(nodes, elements, U, analysisType);
-        else
+    % Vẽ theo loại
+    switch plotType
+        case 1 % Tất cả kết quả
+            subplot(plotLayout(1), plotLayout(2), 1)
+            plotMesh(nodes, elements);
+            title('Cấu hình lưới', 'FontWeight', 'bold')
+            
+            subplot(plotLayout(1), plotLayout(2), 2)
             plotDeformedShape(nodes, elements, U, computeScaleFactor(U));
+            title('Hình dạng biến dạng', 'FontWeight', 'bold')
+            
+            subplot(plotLayout(1), plotLayout(2), 3)
+            plotContourResults(nodes, elements, U);
+            title('Contour chuyển vị', 'FontWeight', 'bold')
+            
+            subplot(plotLayout(1), plotLayout(2), 4)
+            plotAnalysisSpecific(analysisType, U);
+            
+        case 2 % Chỉ lưới và chất lượng
+            plotMeshWithQuality(nodes, elements);
+            
+        case 3 % Biến dạng có hoạt hình
+            if animate
+                animateResults(nodes, elements, U, analysisType);
+            else
+                plotDeformedShape(nodes, elements, U, computeScaleFactor(U));
+            end
+            
+        case 4 % Contour nâng cao
+            plotContourResults(nodes, elements, U);
+    end
+
+    % Áp dụng bảng màu
+    if ~isempty(colormap_name)
+        try
+            colormap(gca, colormap_name);
+        catch
+            warning('Không thể áp dụng bảng màu %s. Sử dụng bảng màu mặc định.', colormap_name);
+            colormap(gca, 'parula');
         end
-        
-    case 4 % Contour nâng cao
-        plotContourResults(nodes, elements, U);
+    end
+
+    % Xuất file nếu có đường dẫn
+    if nargin >= 8 && ~isempty(exportPath)
+        exportResults(figResults, exportPath);
+    end
+
+catch ME
+    % Xử lý lỗi trục đồ thị
+    if contains(ME.message, 'matlab.graphics.axis.Axes')
+        warning('Lỗi trục đồ thị: %s\nĐang tạo figure mới...', ME.message);
+        figure;
+        return;
+    else
+        rethrow(ME);
+    end
 end
-
-% Áp dụng bảng màu
-colormap(gca, colormap);
-
-% Xuất file nếu có đường dẫn
-if ~isempty(exportPath)
-    exportResults(figResults, exportPath);
-end
-
 end
 
 function scaleFactor = computeScaleFactor(U)
@@ -77,19 +93,32 @@ end
 
 function plotMeshWithQuality(nodes, elements)
     % Vẽ lưới với chỉ số chất lượng
-    hold on;
-    [aspectRatio, skewness] = calculateMeshQuality(nodes, elements);
-    qualityMetric = max(aspectRatio, skewness);
-    patch('Faces', elements(:,2:5), ...
-          'Vertices', nodes(:,2:3), ...
-          'FaceVertexCData', qualityMetric, ...
-          'FaceColor', 'flat', ...
-          'EdgeColor', 'k');
-    colorbar('TickLabelInterpreter', 'latex');
-    title('Phân bố chất lượng lưới', 'FontWeight', 'bold');
-    xlabel('X (m)');
-    ylabel('Y (m)');
-    axis equal tight;
+    try
+        [aspectRatio, skewness] = calculateMeshQuality(nodes, elements);
+        qualityMetric = max(aspectRatio, skewness);
+        
+        % Tạo axes mới nếu chưa có
+        if isempty(get(gca, 'Children'))
+            ax = gca;
+        else
+            ax = axes;
+        end
+        
+        hold(ax, 'on');
+        patch(ax, 'Faces', elements(:,2:5), ...
+              'Vertices', nodes(:,2:3), ...
+              'FaceVertexCData', qualityMetric, ...
+              'FaceColor', 'flat', ...
+              'EdgeColor', 'k');
+        colorbar(ax, 'TickLabelInterpreter', 'latex');
+        title(ax, 'Phân bố chất lượng lưới', 'FontWeight', 'bold');
+        xlabel(ax, 'X (m)');
+        ylabel(ax, 'Y (m)');
+        axis(ax, 'equal', 'tight');
+        hold(ax, 'off');
+    catch ME
+        warning('Lỗi khi vẽ chất lượng lưới: %s', ME.message);
+    end
 end
 
 function [aspectRatio, skewness] = calculateMeshQuality(nodes, elements)

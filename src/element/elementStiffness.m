@@ -1,108 +1,160 @@
-function [Ke, Fe] = elementStiffness(xe, ye, D, h, q, varargin)
-    % elementStiffness - Calculates element stiffness matrix and load vector
-    % Inputs:
-    %   xe - x coordinates of element nodes
-    %   ye - y coordinates of element nodes
-    %   D  - Material stiffness matrix
-    %   h  - Plate thickness
-    %   q  - Distributed load
-    % Optional inputs:
-    %   dT - Temperature change across thickness
-    %   alpha - Thermal expansion coefficient
-    
-    % Parse optional thermal inputs
-    p = inputParser;
-    addOptional(p, 'dT', 0);
-    addOptional(p, 'alpha', 0);
-    parse(p, varargin{:});
-    dT = p.Results.dT;
-    alpha = p.Results.alpha;
+function [Ke] = elementStiffness(nodeCoordinates, C_shear, C_bending, thickness)
+% Tính ma trận độ cứng phần tử tấm Mindlin Q4
+% Đầu vào:
+%   nodeCoordinates - Tọa độ nút của phần tử [node_id, x, y]
+%   C_shear        - Ma trận độ cứng cắt
+%   C_bending      - Ma trận độ cứng uốn
+%   thickness      - Chiều dày tấm
 
-    % Material properties for shear
-    G = D(3,3) * 2 * (1 + D(1,2)/D(1,1));  % Shear modulus
-    kappa = 5/6;  % Shear correction factor
+try
+    % Kiểm tra đầu vào
+    validateInputs(nodeCoordinates, C_shear, C_bending, thickness);
+
+    % Số nút của phần tử
+    numberNodes = size(nodeCoordinates, 1);
     
-    % Higher-order Gauss quadrature (3x3) for better accuracy
-    gp = [-sqrt(0.6), 0, sqrt(0.6)];
-    w = [5/9, 8/9, 5/9];
-    
-    % Initialize element matrices
-    Ke = zeros(12, 12);
-    Fe = zeros(12, 1);
-    
-    % Add thermal load vector if temperature change exists
-    if dT ~= 0
-        MT = -D(1,1)*alpha*dT*h^2/(1-D(1,2));  % Thermal moment
-        FT = zeros(12, 1);
+    % Khởi tạo ma trận độ cứng phần tử
+    Ke = zeros(3*numberNodes, 3*numberNodes);
+
+    % Tích phân Gauss cho phần uốn (đầy đủ)
+    [gaussWeights1, gaussLocations1] = gaussQuadrature('complete');
+
+    % Tích phân cho phần uốn
+    for q = 1:size(gaussWeights1,1)
+        GaussPoint = gaussLocations1(q,:);
+        xi = GaussPoint(1);
+        eta = GaussPoint(2);
+
+        % Hàm dạng và đạo hàm
+        [shapeFunction, naturalDerivatives] = shapeFunctionQ4(xi, eta);
+
+        % Ma trận Jacobi và đạo hàm
+        [Jacob, invJacobian, XYderivatives] = ...
+            Jacobian(nodeCoordinates, naturalDerivatives);
+
+        % Ma trận B cho uốn (từ code gốc)
+        B_b = zeros(3, 3*numberNodes);
+        B_b(1,numberNodes+1:2*numberNodes) = XYderivatives(:,1)';
+        B_b(2,2*numberNodes+1:3*numberNodes) = XYderivatives(:,2)';
+        B_b(3,numberNodes+1:2*numberNodes) = XYderivatives(:,2)';
+        B_b(3,2*numberNodes+1:3*numberNodes) = XYderivatives(:,1)';
+
+        % Cập nhật ma trận độ cứng uốn
+        Ke = Ke + B_b'*C_bending*B_b*gaussWeights1(q)*det(Jacob);
     end
 
-    % Loop over Gauss points
-    for i = 1:3
-        for j = 1:3
-            xi = gp(i);
-            eta = gp(j);
-            
-            % Shape functions and derivatives
-            N = [(1-xi)*(1-eta)/4, (1+xi)*(1-eta)/4, (1+xi)*(1+eta)/4, (1-xi)*(1+eta)/4];
-            dNdxi = [-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
-            dNdeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
-            
-            % Jacobian matrix
-            J = [dNdxi*xe, dNdxi*ye;
-                 dNdeta*xe, dNdeta*ye];
-            detJ = det(J);
-            invJ = inv(J);
-            
-            % B matrices for bending and shear
-            Bb = zeros(3, 12);  % Bending
-            Bs = zeros(2, 12);  % Shear
-            
-            for n = 1:4
-                dNdx = invJ(1,1)*dNdxi(n) + invJ(1,2)*dNdeta(n);
-                dNdy = invJ(2,1)*dNdxi(n) + invJ(2,2)*dNdeta(n);
-                idx = 3*(n-1) + 1;
-                
-                % Bending strain-displacement matrix
-                Bb(:, idx:idx+2) = [0, dNdx, 0;
-                                   0, 0, dNdy;
-                                   0, dNdy, dNdx];
-                                   
-                % Modified shear strain-displacement matrix with assumed strain field
-                % This helps prevent shear locking
-                Bs(:, idx:idx+2) = [dNdx, N(n)*(1-xi^2), 0;
-                                   dNdy, 0, N(n)*(1-eta^2)];
-            end
-            
-            % Selective reduced integration for shear terms to prevent locking
-            if i == 2 && j == 2  % Center point
-                shearWeight = 4;  % Increased weight for center point
-            else
-                shearWeight = 1;
-            end
-            
-            % Element stiffness contributions
-            Ke = Ke + (Bb'*D*Bb + kappa*G*h*Bs'*Bs/shearWeight)*detJ*w(i)*w(j);
-            
-            % Element load vector contributions
-            for n = 1:4
-                idx = 3*(n-1) + 1;
-                Fe(idx) = Fe(idx) + N(n)*q*detJ*w(i)*w(j);
-                
-                if dT ~= 0
-                    % Add thermal load contribution
-                    FT(idx+1:idx+2) = FT(idx+1:idx+2) + ...
-                        MT*[dNdx; dNdy]*detJ*w(i)*w(j);
-                end
-            end
-        end
+    % Tích phân Gauss cho phần cắt (suy giảm)
+    [gaussWeights2, gaussLocations2] = gaussQuadrature('reduced');
+
+    % Tích phân cho phần cắt
+    for q = 1:size(gaussWeights2,1)
+        GaussPoint = gaussLocations2(q,:);
+        xi = GaussPoint(1);
+        eta = GaussPoint(2);
+
+        % Hàm dạng và đạo hàm
+        [shapeFunction, naturalDerivatives] = shapeFunctionQ4(xi, eta);
+
+        % Ma trận Jacobi và đạo hàm
+        [Jacob, invJacobian, XYderivatives] = ...
+            Jacobian(nodeCoordinates, naturalDerivatives);
+
+        % Ma trận B cho cắt (từ code gốc)
+        B_s = zeros(2, 3*numberNodes);
+        B_s(1,1:numberNodes) = XYderivatives(:,1)';
+        B_s(2,1:numberNodes) = XYderivatives(:,2)';
+        B_s(1,numberNodes+1:2*numberNodes) = shapeFunction';
+        B_s(2,2*numberNodes+1:3*numberNodes) = shapeFunction';
+
+        % Cập nhật ma trận độ cứng cắt
+        Ke = Ke + B_s'*C_shear*B_s*gaussWeights2(q)*det(Jacob);
+    end
+
+    % Kiểm tra tính chất của ma trận độ cứng phần tử
+    validateElementStiffness(Ke);
+
+catch ME
+    error('Lỗi trong tính toán ma trận độ cứng phần tử: %s', ME.message);
+end
+end
+
+%................................................................
+% Hàm kiểm tra đầu vào
+function validateInputs(nodeCoordinates, C_shear, C_bending, thickness)
+    % Kiểm tra kích thước ma trận tọa độ nút
+    if size(nodeCoordinates,2) ~= 3
+        error('Ma trận tọa độ nút phải có 3 cột [node_id, x, y]');
     end
     
-    % Add thermal loads to force vector
-    if dT ~= 0
-        Fe = Fe + FT;
+    % Kiểm tra kích thước ma trận độ cứng cắt
+    if ~all(size(C_shear) == [2,2])
+        error('Ma trận độ cứng cắt phải có kích thước 2x2');
     end
     
-    % Add stabilization term to prevent zero-energy modes
-    alpha = 1e-6 * trace(Ke)/12;  % Small stabilization factor
-    Ke = Ke + alpha * eye(12);
+    % Kiểm tra kích thước ma trận độ cứng uốn
+    if ~all(size(C_bending) == [3,3])
+        error('Ma trận độ cứng uốn phải có kích thước 3x3');
+    end
+    
+    % Kiểm tra chiều dày
+    if thickness <= 0
+        error('Chiều dày tấm phải dương');
+    end
+    
+    % Kiểm tra tính xác định dương của ma trận độ cứng
+    if any(eig(C_shear) <= 0) || any(eig(C_bending) <= 0)
+        warning('Ma trận độ cứng vật liệu có thể không xác định dương');
+    end
+end
+
+%................................................................
+% Hàm kiểm tra ma trận độ cứng phần tử
+function validateElementStiffness(Ke)
+    % Kiểm tra tính đối xứng
+    if norm(Ke - Ke', 1) / (norm(Ke, 1) + eps) > 1e-10
+        warning('Ma trận độ cứng phần tử không đối xứng');
+    end
+    
+    % Kiểm tra tính xác định không âm
+    if any(eig(Ke) < -eps)
+        warning('Ma trận độ cứng phần tử có thể không xác định không âm');
+    end
+    
+    % Kiểm tra điều kiện số
+    if cond(Ke) > 1e8
+        warning('Điều kiện số của ma trận độ cứng phần tử lớn');
+    end
+    
+    % Kiểm tra cân bằng tĩnh (tổng các hàng/cột phải bằng 0)
+    if any(abs(sum(Ke,1)) > 1e-10) || any(abs(sum(Ke,2)) > 1e-10)
+        warning('Ma trận độ cứng phần tử có thể không thỏa mãn điều kiện cân bằng');
+    end
+end
+
+%................................................................
+% Hàm dạng và đạo hàm cho phần tử Q4 (từ code gốc)
+function [shapeFunction, naturalDerivatives] = shapeFunctionQ4(xi, eta)
+    % Hàm dạng
+    shapeFunction = 1/4*[ ...
+        (1-xi)*(1-eta);
+        (1+xi)*(1-eta);
+        (1+xi)*(1+eta);
+        (1-xi)*(1+eta)];
+    
+    % Đạo hàm theo tọa độ tự nhiên
+    naturalDerivatives = 1/4*[ ...
+        -(1-eta), -(1-xi);
+        1-eta, -(1+xi);
+        1+eta, 1+xi;
+        -(1+eta), 1-xi];
+end
+
+%................................................................
+% Ma trận Jacobi (từ code gốc)
+function [Jacob, invJacobian, XYderivatives] = ...
+    Jacobian(nodeCoordinates, naturalDerivatives)
+    
+    Jacob = [nodeCoordinates(:,2)'; nodeCoordinates(:,3)']*naturalDerivatives;
+    invJacobian = inv(Jacob);
+    XYderivatives = naturalDerivatives*invJacobian;
 end
