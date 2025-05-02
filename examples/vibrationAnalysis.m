@@ -18,34 +18,55 @@ rho = 7850;   % Khối lượng riêng (kg/m³)
 nx = 10; % Số phần tử theo x
 ny = 10; % Số phần tử theo y
 
-% Sinh lưới
-disp('Đang sinh lưới...');
-[nodes, elements] = generateMesh(L, W, nx, ny);
+% Add progress bar
+h = waitbar(0, 'Initializing...', 'Name', 'Vibration Analysis');
 
-% Lắp ráp ma trận độ cứng
-disp('Đang lắp ráp ma trận độ cứng...');
-[K, ~] = assembleSystem(nodes, elements, E, nu, h, 0);
+try
+    % Sinh lưới
+    waitbar(0.2, h, 'Generating mesh...');
+    [nodes, elements] = generateMesh(L, W, nx, ny);
 
-% Lắp ráp ma trận khối lượng
-disp('Đang lắp ráp ma trận khối lượng...');
-M = assembleMassMatrix(nodes, elements, rho, h);
+    % Lắp ráp ma trận độ cứng
+    waitbar(0.4, h, 'Assembling stiffness matrix...');
+    [K, ~] = assembleSystem(nodes, elements, E, nu, h, 0);
 
-% Áp dụng điều kiện biên (đỡ đơn toàn bộ biên)
-disp('Đang áp dụng điều kiện biên...');
-[K_mod, M_mod] = applyVibrationBoundaryConditions(K, M, nodes, 'SSSS');
+    % Lắp ráp ma trận khối lượng
+    waitbar(0.6, h, 'Assembling mass matrix...');
+    M = assembleMassMatrix(nodes, elements, rho, h);
 
-% Giải bài toán giá trị riêng để tìm tần số riêng
-disp('Đang giải bài toán giá trị riêng...');
-[V, D] = eigs(K_mod, M_mod, 5, 'smallestabs');  % Lấy 5 tần số thấp nhất
-frequencies = sqrt(diag(D))/(2*pi);  % Đổi sang Hz
+    % Áp dụng điều kiện biên
+    waitbar(0.8, h, 'Applying boundary conditions...');
+    [K_mod, M_mod] = applyVibrationBoundaryConditions(K, M, nodes, 'SSSS');
 
-% Hiển thị tần số riêng
-disp('Các tần số dao động riêng (Hz):');
-disp(frequencies);
+    % Giải bài toán giá trị riêng
+    waitbar(0.9, h, 'Solving eigenvalue problem...');
+    [V, D] = eigs(K_mod, M_mod, 5, 'smallestabs');  
+    frequencies = sqrt(diag(D))/(2*pi);
 
-% Vẽ mode dao động đầu tiên
-disp('Vẽ mode dao động đầu tiên...');
-plotDeformedShape(nodes, elements, V(:,1), 0.2);
-title('Mode dao động thứ nhất');
+    % Enhanced visualization
+    waitbar(1, h, 'Creating visualizations...');
+    figure('Name', 'Vibration Analysis Results');
+    
+    % Mode shapes subplot
+    for i = 1:min(4,length(frequencies))
+        subplot(2,2,i);
+        plotDeformedShape(nodes, elements, V(:,i), 0.2);
+        title(sprintf('Mode %d: %.2f Hz', i, frequencies(i)));
+        colorbar;
+    end
+
+    % Save results
+    results = struct('nodes', nodes, 'elements', elements, ...
+                    'modes', V, 'frequencies', frequencies, ...
+                    'parameters', struct('E',E, 'nu',nu, 'h',h, 'rho',rho));
+    save('vibration_results.mat', 'results');
+    
+catch ME
+    delete(h);
+    errordlg(['Analysis failed: ' ME.message], 'Error');
+    rethrow(ME);
+end
+
+delete(h);
 
 disp('Đã hoàn thành phân tích!');

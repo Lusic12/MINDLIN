@@ -29,65 +29,76 @@ q = -1000;    % Áp suất đều (N/m²)
 maxRefinements = 3;
 errorTol = 0.1;
 
-% Sinh lưới ban đầu
-[nodes, elements] = generateMesh(L, W, nx, ny);
+% Add progress tracking
+h = waitbar(0, 'Initializing...', 'Name', 'Enhanced Analysis');
 
-% Vòng lặp tinh chỉnh lưới thích nghi
-for iter = 1:maxRefinements
-    fprintf('Lần tinh chỉnh %d\n', iter);
-    
-    % Lắp ráp hệ có xét đến nhiệt
-    [K, F] = assembleSystem(nodes, elements, E, nu, h, q, 'dT', dT, 'alpha', alpha);
-    
-    % Áp dụng điều kiện biên (đỡ đơn toàn bộ biên)
-    [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, 'SSSS');
-    
-    % Giải hệ
-    U = K_mod\F_mod;
-    
-    % Tính ứng suất
-    [Mx, My, Mxy, Qx, Qy] = computeStresses(nodes, elements, U, E, nu, h);
-    
-    % Vẽ kết quả hiện tại
-    figure(iter);
-    
-    % Đồ thị chuyển vị
-    subplot(2,2,1);
-    plotDeformedShape(nodes, elements, U, 0.2);
-    title(sprintf('Biến dạng (Lần %d)', iter));
-    
-    % Đồ thị mô men
-    subplot(2,2,2);
-    plotResults(nodes, elements, Mx, 1, 4, 'parula', false);
-    title('Mô men uốn Mx');
-    
-    % Đồ thị lực cắt
-    subplot(2,2,3);
-    plotResults(nodes, elements, Qx, 1, 4, 'parula', false);
-    title('Lực cắt Qx');
-    
-    % Lưới hiện tại
-    subplot(2,2,4);
-    plotMesh(nodes, elements);
-    title(sprintf('Lưới (N = %d)', size(elements,1)));
-    
-    % Kiểm tra có cần tinh chỉnh tiếp không
-    if iter < maxRefinements
+try
+    % Sinh lưới ban đầu
+    waitbar(0.1, h, 'Generating initial mesh...');
+    [nodes, elements] = generateMesh(L, W, nx, ny);
+
+    % Vòng lặp tinh chỉnh lưới thích nghi
+    for iter = 1:maxRefinements
+        waitbar(iter/maxRefinements, h, sprintf('Refinement iteration %d/%d', iter, maxRefinements));
+        fprintf('Lần tinh chỉnh %d\n', iter);
+        
+        % Lắp ráp hệ có xét đến nhiệt
+        [K, F] = assembleSystem(nodes, elements, E, nu, h, q, 'dT', dT, 'alpha', alpha);
+        
+        % Áp dụng điều kiện biên (đỡ đơn toàn bộ biên)
+        [K_mod, F_mod] = applyBoundaryConditions(K, F, nodes, 'SSSS');
+        
+        % Giải hệ
+        U = K_mod\F_mod;
+        
+        % Enhanced visualization with error indicators
+        figure('Name', sprintf('Analysis Results - Iteration %d', iter));
+        [errorIndicators] = computeErrorIndicators(nodes, elements, U, E, nu, h);
+        
+        subplot(2,2,1);
+        plotDeformedShape(nodes, elements, U, 0.2);
+        title('Deformed Shape');
+        
+        subplot(2,2,2);
+        plotErrorDistribution(nodes, elements, errorIndicators);
+        title('Error Distribution');
+        
+        subplot(2,2,3);
+        plotStressContours(nodes, elements, U, E, nu, h);
+        title('von Mises Stress');
+        
+        subplot(2,2,4);
+        plotMeshQuality(nodes, elements);
+        title('Mesh Quality');
+        
+        % Kiểm tra có cần tinh chỉnh tiếp không
+        if max(errorIndicators) < errorTol
+            break;
+        end
+        
         % Tinh chỉnh lưới thích nghi
-        [nodes, elements] = adaptiveMesh(nodes, elements, U, E, nu, h, errorTol);
+        [nodes, elements] = adaptiveMesh(nodes, elements, errorIndicators, errorTol);
         fprintf('Số phần tử mới: %d\n', size(elements,1));
     end
+    
+    % Hiển thị kết quả cuối cùng
+    fprintf('\nHoàn thành phân tích\n');
+    fprintf('Tổng số phần tử cuối: %d\n', size(elements,1));
+    fprintf('Chuyển vị lớn nhất: %.3e m\n', max(abs(U(1:3:end))));
+    fprintf('Mô men uốn lớn nhất: %.3e N⋅m/m\n', max(abs(Mx)));
+    fprintf('Lực cắt lớn nhất: %.3e N/m\n', max(abs(Qx)));
+    
+    % Lưu kết quả
+    waitbar(1, h, 'Saving results...');
+    results = struct('nodes', nodes, 'elements', elements, ...
+                    'displacement', U, 'parameters', struct(...
+                    'E',E, 'nu',nu, 'h',h, 'dT',dT, 'alpha',alpha));
+    save('enhanced_results.mat', 'results');
+
+catch ME
+    delete(h);
+    errordlg(['Analysis failed: ' ME.message], 'Error');
+    rethrow(ME);
 end
 
-% Hiển thị kết quả cuối cùng
-fprintf('\nHoàn thành phân tích\n');
-fprintf('Tổng số phần tử cuối: %d\n', size(elements,1));
-fprintf('Chuyển vị lớn nhất: %.3e m\n', max(abs(U(1:3:end))));
-fprintf('Mô men uốn lớn nhất: %.3e N⋅m/m\n', max(abs(Mx)));
-fprintf('Lực cắt lớn nhất: %.3e N/m\n', max(abs(Qx)));
-
-% Lưu kết quả
-results = struct('nodes', nodes, 'elements', elements, ...
-                'displacement', U, 'Mx', Mx, 'My', My, 'Mxy', Mxy, ...
-                'Qx', Qx, 'Qy', Qy);
-save('enhanced_analysis_results.mat', 'results');
+delete(h);

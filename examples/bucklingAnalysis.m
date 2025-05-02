@@ -18,34 +18,54 @@ Nx = -1000;   % Lực nén theo phương x (N/m)
 nx = 10; % Số phần tử theo x
 ny = 10; % Số phần tử theo y
 
-% Sinh lưới
-disp('Đang sinh lưới...');
-[nodes, elements] = generateMesh(L, W, nx, ny);
+% Add progress bar
+h = waitbar(0, 'Initializing...', 'Name', 'Buckling Analysis');
 
-% Lắp ráp ma trận độ cứng vật liệu
-disp('Đang lắp ráp ma trận độ cứng vật liệu...');
-[K, ~] = assembleSystem(nodes, elements, E, nu, h, 0);
+try
+    % Sinh lưới
+    waitbar(0.2, h, 'Generating mesh...');
+    [nodes, elements] = generateMesh(L, W, nx, ny);
 
-% Lắp ráp ma trận độ cứng hình học
-disp('Đang lắp ráp ma trận độ cứng hình học...');
-Kg = assembleGeometricStiffness(nodes, elements, Nx);
+    % Lắp ráp ma trận
+    waitbar(0.4, h, 'Assembling material stiffness...');
+    [K, ~] = assembleSystem(nodes, elements, E, nu, h, 0);
 
-% Áp dụng điều kiện biên (đỡ đơn toàn bộ biên)
-disp('Đang áp dụng điều kiện biên...');
-[K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes, 'SSSS');
+    waitbar(0.6, h, 'Assembling geometric stiffness...');
+    Kg = assembleGeometricStiffness(nodes, elements, Nx);
 
-% Giải bài toán giá trị riêng
-disp('Đang giải bài toán giá trị riêng...');
-[V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');  % Lấy 5 giá trị riêng nhỏ nhất
-lambdas = diag(D);
+    % Áp dụng điều kiện biên
+    waitbar(0.8, h, 'Applying boundary conditions...');
+    [K_mod, Kg_mod] = applyBucklingBoundaryConditions(K, Kg, nodes, 'SSSS');
 
-% Hiển thị hệ số tới hạn
-disp('Các hệ số tải tới hạn:');
-disp(lambdas);
+    % Giải bài toán
+    waitbar(0.9, h, 'Solving eigenvalue problem...');
+    [V, D] = eigs(K_mod, Kg_mod, 5, 'smallestabs');
+    lambdas = diag(D);
 
-% Vẽ mode mất ổn định đầu tiên
-disp('Vẽ mode mất ổn định đầu tiên...');
-plotDeformedShape(nodes, elements, V(:,1), 0.2);
-title('Mode mất ổn định thứ nhất');
+    % Enhanced visualization
+    waitbar(1, h, 'Creating visualizations...');
+    figure('Name', 'Buckling Analysis Results');
+    
+    % Plot multiple buckling modes
+    for i = 1:min(4,length(lambdas))
+        subplot(2,2,i);
+        plotDeformedShape(nodes, elements, V(:,i), 0.2);
+        title(sprintf('Mode %d: λ = %.2f', i, lambdas(i)));
+        colorbar;
+    end
+
+    % Save results
+    results = struct('nodes', nodes, 'elements', elements, ...
+                    'modes', V, 'lambdas', lambdas, ...
+                    'parameters', struct('E',E, 'nu',nu, 'h',h, 'Nx',Nx));
+    save('buckling_results.mat', 'results');
+
+catch ME
+    delete(h);
+    errordlg(['Analysis failed: ' ME.message], 'Error');
+    rethrow(ME);
+end
+
+delete(h);
 
 disp('Đã hoàn thành phân tích!');

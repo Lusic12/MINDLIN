@@ -11,7 +11,14 @@ function [K] = formStiffnessMatrixMindlinQ4(GDof, numberElements, elementNodes, 
 %   thickness       - Chiều dày tấm
 %   I               - Moment quán tính
 
+% Add input validation
+validateattributes(thickness, {'numeric'}, {'positive', 'scalar'});
+validateattributes(I, {'numeric'}, {'positive', 'scalar'});
+
 try
+    % Initialize progress tracking
+    h = waitbar(0, 'Assembling stiffness matrix...'); 
+
     % Khởi tạo ma trận độ cứng toàn cục
     K = sparse(GDof, GDof);
 
@@ -90,13 +97,38 @@ try
                 B_s'*C_shear*B_s*gaussWeights(q)*det(Jacob);
         end
     end
-    
+
+    % Add mesh quality check
+    for e = 1:numberElements
+        aspectRatio = computeElementAspectRatio(nodeCoordinates(elementNodes(e,:),:));
+        if aspectRatio > 5
+            warning('Element %d has high aspect ratio: %.2f', e, aspectRatio);
+        end
+    end
+
+    % Add matrix condition check 
+    condK = condest(K);
+    if condK > 1e8
+        warning('Stiffness matrix poorly conditioned: %.2e', condK);
+    end
+
     % Kiểm tra tính đúng đắn của ma trận độ cứng toàn cục
     validateStiffnessMatrix(K);
 
+    close(h);
 catch ME
+    if exist('h', 'var'), close(h); end
     error('Lỗi trong lắp ráp ma trận độ cứng: %s', ME.message);
 end
+end
+
+function ratio = computeElementAspectRatio(nodes)
+    % Compute element aspect ratio
+    edges = [norm(nodes(2,:) - nodes(1,:));
+             norm(nodes(3,:) - nodes(2,:));
+             norm(nodes(4,:) - nodes(3,:));
+             norm(nodes(1,:) - nodes(4,:))];
+    ratio = max(edges)/min(edges);
 end
 
 %................................................................

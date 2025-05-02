@@ -11,14 +11,23 @@ function [mass] = formMassMatrixMindlinQ4(GDof, numberElements, elementNodes, nu
 %   I               - Moment quán tính
 
 try
-    % Khởi tạo ma trận khối lượng
-    mass = sparse(GDof, GDof);
+    % Initialize progress
+    h = waitbar(0, 'Assembling mass matrix...');
+
+    % Use sparse matrix for better performance
+    mass = spalloc(GDof, GDof, 20*numberElements);
+
+    % Pre-allocate matrices
+    Me = zeros(12,12);
+    dof = zeros(12,1);
 
     % Điểm và trọng số Gauss cho tích phân đầy đủ
     [gaussWeights, gaussLocations] = gaussQuadrature('complete');
 
     % Vòng lặp qua từng phần tử
     for e = 1:numberElements
+        waitbar(e/numberElements, h);
+
         % Chỉ số nút của phần tử
         indice = elementNodes(e,:);
         ndof = length(indice);
@@ -37,28 +46,38 @@ try
                 Jacobian(nodeCoordinates(indice,:), naturalDerivatives);
 
             % Ma trận khối lượng cho chuyển vị dọc (từ code gốc)
-            mass(indice,indice) = mass(indice,indice) + ...
+            Me(1:4,1:4) = Me(1:4,1:4) + ...
                 shapeFunction*shapeFunction'*thickness*rho*...
                 gaussWeights(q)*det(Jacob);
 
             % Ma trận khối lượng cho xoay θx
-            mass(indice+numberNodes,indice+numberNodes) = ...
-                mass(indice+numberNodes,indice+numberNodes) + ...
+            Me(5:8,5:8) = Me(5:8,5:8) + ...
                 shapeFunction*shapeFunction'*I*rho*...
                 gaussWeights(q)*det(Jacob);
 
             % Ma trận khối lượng cho xoay θy
-            mass(indice+2*numberNodes,indice+2*numberNodes) = ...
-                mass(indice+2*numberNodes,indice+2*numberNodes) + ...
+            Me(9:12,9:12) = Me(9:12,9:12) + ...
                 shapeFunction*shapeFunction'*I*rho*...
                 gaussWeights(q)*det(Jacob);
         end
+
+        % Add lumped mass option
+        if useLumpedMass
+            Me = diagLumpMassMatrix(Me);
+        end
+
+        % Assembly using sparse indexing
+        dof = computeDofIndices(elementNodes(e,:), numberNodes);
+        mass = assembleElementMatrix(mass, Me, dof);
     end
+
+    close(h);
 
     % Kiểm tra tính đúng đắn của ma trận khối lượng
     validateMassMatrix(mass);
 
 catch ME
+    if exist('h','var'), close(h); end
     error('Lỗi trong tính toán ma trận khối lượng: %s', ME.message);
 end
 end
@@ -82,5 +101,16 @@ function validateMassMatrix(mass)
     % Kiểm tra điều kiện số
     if condest(mass) > 1e8
         warning('Điều kiện số của ma trận khối lượng lớn');
+    end
+end
+
+%................................................................
+% Hàm tạo ma trận khối lượng dạng chéo
+function M = diagLumpMassMatrix(M)
+    % Row-sum lumping technique
+    for i = 1:size(M,1)
+        rowSum = sum(M(i,:));
+        M(i,:) = 0;
+        M(i,i) = rowSum;
     end
 end
